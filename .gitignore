@@ -87,6 +87,7 @@ typings/
 # DynamoDB Local files
 .dynamodb/
 
+src/dist/index.bundle.js
 src/config.json
 data/info.json
 .vscode
