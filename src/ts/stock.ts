@@ -1,9 +1,7 @@
-import https from 'https';
 import axios from 'axios';
 import iconv from 'iconv-lite';
 import urlencode from 'urlencode';
 import { parse } from 'node-html-parser';
-import { ItemInfo } from './types';
 
 export default class Stock {
     private static readonly DEFAULT_URL = 'https://finance.naver.com';
@@ -12,7 +10,7 @@ export default class Stock {
 
     }
 
-    public async search(query: string): Promise<Array<ItemInfo>> {
+    public async searchItems(query: string): Promise<Array<ItemInfo>> {
         let searchUrl = Stock.DEFAULT_URL + '/search/searchList.nhn?query=' + urlencode(query, 'euc-kr');
         
         let buffer = await axios.request({
@@ -38,20 +36,21 @@ export default class Stock {
                 let name = tdList[0].querySelector('a').text.trim();
                 let href = tdList[0].querySelector('a').getAttribute('href');
                 let code = href.substring(href.lastIndexOf('=') + 1, href.length);
-                let currentPrice = parseInt(tdList[1].text.trim().replace(/,/g, ''));
+                let price = parseInt(tdList[1].text.trim().replace(/,/g, ''));
                 let deltaPrice = parseInt(tdList[2].text.trim().replace(/,/g, ''));
                 if (tdList[2].classNames.indexOf('down')) {
                     deltaPrice *= -1;
                 }
                 let adr = tdList[3].text.trim();
 
-                let info: ItemInfo = {
-                    name: name,
-                    code: code,
-                    currentPrice: currentPrice,
-                    deltaPrice: deltaPrice,
-                    adr: adr
-                };
+                let info = new ItemInfo(
+                    name,
+                    code,
+                    price,
+                    deltaPrice,
+                    adr
+                );
+
                 itemInfoList.push(info);
             }
 
@@ -84,7 +83,7 @@ export default class Stock {
             let tmp = document.querySelectorAll('.no_exday em');
 
             let name = document.querySelector('.wrap_company ').text.trim();
-            let currentPrice = parseInt(document.querySelector('.no_today .blind').text.trim().replace(/,/g, ''));
+            let price = parseInt(document.querySelector('.no_today .blind').text.trim().replace(/,/g, ''));
             let deltaPrice = parseInt(tmp[0].querySelector('.blind').text.trim().replace(/,/g, ''));
             if (tmp[0].querySelector('.down')) {
                 deltaPrice *= -1;
@@ -98,10 +97,26 @@ export default class Stock {
             return {
                 name: name,
                 code: code,
-                currentPrice: currentPrice,
+                price: price,
                 deltaPrice: deltaPrice,
                 adr: adr
             }
         }
+    }
+}
+
+export class ItemInfo {
+    public name: string;
+    public code: string;
+    public price: number;
+    public deltaPrice: number;
+    public adr: string;
+
+    public constructor(name: string, code: string, price: number, deltaPrice: number, adr: string) {
+        this.name = name;
+        this.code = code;
+        this.price = price;
+        this.deltaPrice = deltaPrice;
+        this.adr = adr;
     }
 }

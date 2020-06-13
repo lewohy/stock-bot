@@ -1,10 +1,11 @@
-import Discord from 'discord.js';
+import Discord, { Guild } from 'discord.js';
 import path from 'path';
 import util from 'util';
 import fs from 'fs';
 import commander, { Command, CommanderError, CommanderStatic, command, option } from 'commander';
-import Stock from './stock';
-import { ItemInfo, GuildInfo, MemberInfo, DealInfo, DealType, InfoJSON } from './types';
+import Stock, { ItemInfo } from './stock';
+import { GuildInfo, MemberInfo, DealInfo, DealType, InfoJSON } from './types';
+import chat from '../chat.json';
 import config from '../config.json';
 
 const CWD: string = process.env['INIT_CWD'] ? process.env['INIT_CWD'] : path.dirname(process.argv[0]);
@@ -93,32 +94,24 @@ class StockBot {
                 console.log(options);
 
                 if (options.H) {
-                    message.channel.send(
-                        '검색 ``/stock --search ``__``query``__\n' +
-                        '> 해당 query 검색, 검색 결과의 code 및 가격을 알려줌\n' +
-                        '\n' +
-                        '매수 ``/stock -b ``__``count``__`` -c ``__``code``__\n' +
-                        '> 해당 code 에 해당하는 회사의 주식을 count만큼 구매\n' +
-                        '\n' +
-                        '매도 ``/stock -s ``__``count``__`` -c ``__``code``__\n' +
-                        '> 해당 code 에 해당하는 회사의 주식을 count만큼 판매\n' +
-                        '\n' +
-                        '내 로그 보기 ``/stock --show\n' +
-                        '> 내 정보를 보여줌\n' +
-                        '\n' +
-                        '왼쪽의 옵션을 오른쪽 구분으로 대체 가능\n' +
-                        '``-b`` ``--buy``\n' +
-                        '``-s`` ``--sell``\n' +
-                        '``-c`` ``--code``\n' +
-                        'ex)\n' +
-                        '매수 ``/stock --buy ``__``count``__`` --code ``__``code``__\n'
-                    );
+                    message.channel.send(chat.HELP.join('\n'));
                 } else {
                     if (options.search) {
                         await this.search(message, options.search);
                     }
 
                     if (options.buy || options.sell) {
+                        let buyCount = Number(options.buy);
+                        let sellCount = Number(options.sell);
+
+                        if (isNaN(buyCount)) {
+                            throw new Error(`'${options.buy}' is not a number.`);
+                        }
+
+                        if (isNaN(sellCount)) {
+                            throw new Error(`'${options.sell}' is not a number.`);
+                        }
+
                         if (!options.code) {
                             throw new Error('The code is missing.');
                         }
@@ -128,23 +121,12 @@ class StockBot {
                         }
 
                         if (options.buy) {
-                            let count = Number(options.buy);
-                            if (isNaN(count)) {
-                                throw new Error(`'${options.buy}' is not a number.`);
-                            }
-
-                            await this.buy(message, options.code, count);
+                            await this.buy(message, options.code, buyCount);
                         }
 
                         if (options.sell) {
-                            let count = Number(options.sell);
-                            if (isNaN(count)) {
-                                throw new Error(`'${options.sell}' is not a number.`);
-                            }
-
-                            await this.sell(message, options.code, count);
+                            await this.sell(message, options.code, sellCount);
                         }
-
                         
                         this.saveGuildInfoList();
                     }
@@ -167,15 +149,22 @@ class StockBot {
 
     private async search(message: Discord.Message, query: string): Promise<void> {
         let msg = await message.channel.send('검색중...');
-        let itemInfoList = await this.stock.search(query);
 
-        if (itemInfoList) {
-            msg.edit(itemInfoList.map(info => {
-                return `\`\`${info.name}\`\` code: \`\`${info.code}\`\` 현재가: \`\`${info.currentPrice}\`\` 등락율: \`\`${info.adr}\`\``;
-            }).join('\n'));
+        let content = new Array<string>();
+
+        let list = await this.stock.searchItems(query);
+
+        list.forEach(info => {
+            content.push(`\`\`${info.name}\`\` 현재가: \`\`${info.price}\`\` 전날 대비: \`\`${info.deltaPrice}\`\` 등락율: \`\`${info.adr}\`\``);
+        });
+
+        if (list === null) {
+            content.push(`\`\`${query}\`\` 검색결과 없음.`);
         } else {
-            msg.edit(`\`\`${query}\`\` 검색결과 없음.`);
+            content.push(`\`\`${list.length}\`\`개의 검색 결과`);
         }
+
+        msg.edit(content.join('\n'));
     }
 
     private async buy(message: Discord.Message, code: string, count: number): Promise<void> {
@@ -187,16 +176,11 @@ class StockBot {
         }
 
         let memebrInfo = this.getGuildInfo(message.guild.id).getMemberInfo(message.author.id);
-        let dealInfo: DealInfo = {
-            date: new Date().toLocaleString(),
-            type: DealType.Buy,
-            count: count,
-            itemInfo: itemInfo
-        };
+        let dealInfo = new DealInfo(new Date().toLocaleString(), DealType.Buy, count, itemInfo);
 
         memebrInfo.dealInfoList.push(dealInfo);
 
-        message.channel.send(`\`\`${message.member.nickname}\`\` 님이 \`\`${itemInfo.name}\`\`의 주식 \`\`${count}\`\`개, 총 \`\`${count * itemInfo.currentPrice}\`\`원 구매했습니다.`);
+        message.channel.send(`\`\`${this.getName(message.member)}\`\` 님이 \`\`${itemInfo.name}\`\`의 주식 \`\`${count}\`\`개, 총 \`\`${count * itemInfo.price}\`\`원 구매했습니다.`);
     }
 
     private async sell(message: Discord.Message, code: string, count: number): Promise<void> {
@@ -221,7 +205,7 @@ class StockBot {
         });
 
         if (count > posessionCount) {
-            message.channel.send(`\`\`${message.member.nickname}\`\`님이 가지고 있는 \`\`${itemInfo.name}\`\`주식 갯수는 \`\`${posessionCount}\`\`개인데 \`\`${count}\`\`개를 팔려고 시도했습니다.`);
+            message.channel.send(`\`\`${this.getName(message.member)}\`\`님이 가지고 있는 \`\`${itemInfo.name}\`\`주식 갯수는 \`\`${posessionCount}\`\`개인데 \`\`${count}\`\`개를 팔려고 시도했습니다.`);
             return;
         }
 
@@ -233,13 +217,13 @@ class StockBot {
         };
 
         memebrInfo.dealInfoList.push(dealInfo);
-        message.channel.send(`\`\`${message.member.nickname}\`\` 님이 \`\`${itemInfo.name}\`\`의 주식 \`\`${count}\`\`개, 총 \`\`${count * itemInfo.currentPrice}\`\`원 팔았습니다.`);
+        message.channel.send(`\`\`${this.getName(message.member)}\`\` 님이 \`\`${itemInfo.name}\`\`의 주식 \`\`${count}\`\`개, 총 \`\`${count * itemInfo.price}\`\`원 팔았습니다.`);
     }
 
     private async show(message: Discord.Message) {
         let memebrInfo = this.getGuildInfo(message.guild.id).getMemberInfo(message.author.id);
         let table = [
-            `\`\`${message.member.nickname ? message.member.nickname : message.author.username}\`\`님의 거래 정보`,
+            `\`\`${this.getName(message.member)}\`\`님의 거래 정보`,
             '```',
             ['date'.padStart(20), 'type'.padStart(10), 'count'.padStart(11), 'price'.padStart(11), 'name'.padStart(10)].join(''),
             '─'.repeat(62)
@@ -249,7 +233,7 @@ class StockBot {
         let currentMoney = 0;
 
         memebrInfo.dealInfoList.forEach(dealInfo => {
-            currentMoney += (dealInfo.type == DealType.Buy ? -1 : 1) * dealInfo.itemInfo.currentPrice * dealInfo.count;
+            currentMoney += (dealInfo.type == DealType.Buy ? -1 : 1) * dealInfo.itemInfo.price * dealInfo.count;
 
             if (currentMoney < maxLossMoney) {
                 maxLossMoney = currentMoney;
@@ -263,7 +247,7 @@ class StockBot {
                 dealInfo.date.padStart(20),
                 (dealInfo.type == DealType.Buy ? 'buy' : 'sell').toString().padStart(10),
                 dealInfo.count.toString().padStart(11),
-                dealInfo.itemInfo.currentPrice.toString().padStart(11),
+                dealInfo.itemInfo.price.toString().padStart(11),
                 dealInfo.itemInfo.name.toString().padStart(10),
             ].join('');
 
@@ -304,20 +288,20 @@ class StockBot {
             guildJSON.memberInfoList.forEach(memberInfoJSON => {
                 let memberInfo = new MemberInfo(memberInfoJSON._memberId);
                 memberInfoJSON.dealInfoList.forEach(dealInfoJSON => {
-                    let itemInfo: ItemInfo = {
-                        name: dealInfoJSON.itemInfo.name,
-                        code: dealInfoJSON.itemInfo.code,
-                        currentPrice: dealInfoJSON.itemInfo.currentPrice,
-                        deltaPrice: dealInfoJSON.itemInfo.deltaPrice,
-                        adr: dealInfoJSON.itemInfo.adr,
-                    }
+                    let itemInfo = new ItemInfo(
+                        dealInfoJSON.itemInfo.name,
+                        dealInfoJSON.itemInfo.code,
+                        dealInfoJSON.itemInfo.price,
+                        dealInfoJSON.itemInfo.deltaPrice,
+                        dealInfoJSON.itemInfo.adr
+                    );
 
-                    let dealInfo: DealInfo = {
-                        date: dealInfoJSON.date,
-                        type: dealInfoJSON.type,
-                        count: dealInfoJSON.count,
-                        itemInfo: itemInfo,
-                    };
+                    let dealInfo = new DealInfo(
+                        dealInfoJSON.date,
+                        dealInfoJSON.type,
+                        dealInfoJSON.count,
+                        itemInfo
+                    );
 
                     memberInfo.dealInfoList.push(dealInfo);
                 });
@@ -327,6 +311,10 @@ class StockBot {
 
             this.guildInfoList.push(guildInfo);
         });
+    }
+
+    private getName(member: Discord.GuildMember): string {
+        return member.nickname ? member.nickname : member.user.username;
     }
 }
 

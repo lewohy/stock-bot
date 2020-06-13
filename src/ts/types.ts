@@ -1,16 +1,17 @@
-export type ItemInfo = {
-    name: string;
-    code: string;
-    currentPrice: number;
-    deltaPrice: number;
-    adr: string;
-}
+import { ItemInfo } from './stock';
 
-export type DealInfo = {
-    date: string;
-    type: DealType;
-    count: number;
-    itemInfo: ItemInfo;
+export class DealInfo {
+    public date: string;
+    public type: DealType;
+    public count: number;
+    public itemInfo: ItemInfo;
+
+    public constructor(date: string, type: DealType, count: number, itemInfo: ItemInfo) {
+        this.date = date;
+        this.type = type;
+        this.count = count;
+        this.itemInfo = itemInfo;
+    }
 }
 
 export class MemberInfo {
@@ -69,7 +70,8 @@ export type InfoJSON = [
                         itemInfo: {
                             name: string,
                             code: string,
-                            currentPrice: number,
+                            location: string,
+                            price: number,
                             deltaPrice: number,
                             adr: string
                         }
