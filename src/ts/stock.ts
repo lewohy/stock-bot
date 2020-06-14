@@ -38,7 +38,7 @@ export default class Stock {
                 let code = href.substring(href.lastIndexOf('=') + 1, href.length);
                 let price = parseInt(tdList[1].text.trim().replace(/,/g, ''));
                 let deltaPrice = parseInt(tdList[2].text.trim().replace(/,/g, ''));
-                if (tdList[2].classNames.indexOf('down')) {
+                if (tdList[2].classNames.indexOf('down') >= 0) {
                     deltaPrice *= -1;
                 }
                 let adr = tdList[3].text.trim();
