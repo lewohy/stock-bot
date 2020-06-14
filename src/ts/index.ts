@@ -155,7 +155,7 @@ class StockBot {
         let list = await this.stock.searchItems(query);
 
         list.forEach(info => {
-            content.push(`\`\`${info.name}\`\` 현재가: \`\`${info.price}\`\` 전날 대비: \`\`${info.deltaPrice}\`\` 등락율: \`\`${info.adr}\`\``);
+            content.push(`\`\`${info.name}\`\` code: \`\`${info.code}\`\`현재가: \`\`${info.price}\`\` 전날 대비: \`\`${info.deltaPrice}\`\` 등락율: \`\`${info.adr}\`\``);
         });
 
         if (list === null) {
