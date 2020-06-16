@@ -33,9 +33,6 @@ class StockBot {
     }
 
     private async onReady(): Promise<void> {
-        await this.client.user.setActivity('preparing...', {
-            type: 'CUSTOM_STATUS'
-        });
         this.loadGuildInfoList();
 
         let guildList = this.client.guilds.cache.array();
@@ -63,10 +60,6 @@ class StockBot {
                 
                 this.guildInfoList.push(guildInfo);
             }
-        });
-
-        await this.client.user.setActivity('for help \'/stock -h\'', {
-            type: 'CUSTOM_STATUS'
         });
     }
 
@@ -104,11 +97,11 @@ class StockBot {
                         let buyCount = Number(options.buy);
                         let sellCount = Number(options.sell);
 
-                        if (isNaN(buyCount)) {
+                        if (options.buy && isNaN(buyCount)) {
                             throw new Error(`'${options.buy}' is not a number.`);
                         }
 
-                        if (isNaN(sellCount)) {
+                        if (options.sell && isNaN(sellCount)) {
                             throw new Error(`'${options.sell}' is not a number.`);
                         }
 
@@ -225,8 +218,8 @@ class StockBot {
         let table = [
             `\`\`${this.getName(message.member)}\`\`님의 거래 정보`,
             '```',
-            ['date'.padStart(20), 'type'.padStart(10), 'count'.padStart(11), 'price'.padStart(11), 'name'.padStart(10)].join(''),
-            '─'.repeat(62)
+            ['date'.padStart(22), 'type'.padStart(10), 'count'.padStart(11), 'price'.padStart(11), 'name'.padStart(10)].join(''),
+            '─'.repeat(70)
         ];
         let maxLossMoney = 0;
         let maxProfitMoney = 0;
@@ -244,11 +237,12 @@ class StockBot {
             }
 
             let row = [
-                dealInfo.date.padStart(20),
+                dealInfo.date.padStart(22),
                 (dealInfo.type == DealType.Buy ? 'buy' : 'sell').toString().padStart(10),
                 dealInfo.count.toString().padStart(11),
                 dealInfo.itemInfo.price.toString().padStart(11),
-                dealInfo.itemInfo.name.toString().padStart(10),
+                ' '.repeat(6),
+                dealInfo.itemInfo.name.toString()
             ].join('');
 
             table.push(row);
