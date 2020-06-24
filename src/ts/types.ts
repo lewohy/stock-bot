@@ -15,7 +15,10 @@ export class DealInfo {
 }
 
 export class MemberInfo {
+    private static readonly INITIAL_MONEY = 1000000;
+
     private _memberId: string;
+    public money: number;
     public readonly dealInfoList: Array<DealInfo>;
 
     public get memberId() {
@@ -25,6 +28,14 @@ export class MemberInfo {
     public constructor(memberId: string) {
         this._memberId = memberId;
         this.dealInfoList = new Array<DealInfo>();
+    }
+
+    public clearDealInfo(): void {
+        while (this.dealInfoList.length > 0) {
+            this.dealInfoList.pop();
+        }
+
+        this.money = MemberInfo.INITIAL_MONEY;
     }
 }
 
@@ -62,6 +73,7 @@ export type InfoJSON = [
         memberInfoList: [
             {
                 _memberId: string,
+                money: number,
                 dealInfoList: [
                     {
                         date: string,

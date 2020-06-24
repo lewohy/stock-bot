@@ -9,7 +9,7 @@ import chat from '../chat.json';
 import config from '../config.json';
 
 const CWD: string = process.env['INIT_CWD'] ? process.env['INIT_CWD'] : path.dirname(process.argv[0]);
-const GUILD_INFO_PATH = CWD + '\\data\\info.json';
+const GUILD_INFO_PATH = CWD + '/data/info.json';
 
 class StockBot {
     private prepared: boolean;
@@ -40,12 +40,13 @@ class StockBot {
         guildList.forEach(guild => {
             let guildInfo = this.getGuildInfo(guild.id);
             if (guildInfo) {
-                
                 let memberList = guild.members.cache.array();
                 
                 memberList.forEach(member => {
                     if (!guildInfo.getMemberInfo(member.id)) {
-                        guildInfo.memberInfoList.push(new MemberInfo(member.id));
+                        let memberInfo = new MemberInfo(member.id);
+                        memberInfo.clearDealInfo();
+                        guildInfo.memberInfoList.push(memberInfo);
                     }
                 });
             } else {
@@ -54,7 +55,9 @@ class StockBot {
                 let memberList = guild.members.cache.array();
                 
                 memberList.forEach(member => {
-                    guildInfo.memberInfoList.push(new MemberInfo(member.id));
+                    let memberInfo = new MemberInfo(member.id);
+                    memberInfo.clearDealInfo();
+                    guildInfo.memberInfoList.push(memberInfo);
                 });
 
                 
@@ -77,6 +80,7 @@ class StockBot {
                     .option('-b, --buy <count>', '')
                     .option('-s, --sell <count>', '')
                     .option('-c, --code <code>', '')
+                    .option('--clear')
                     .option('--show', '');
     
                 program.exitOverride();
@@ -88,6 +92,9 @@ class StockBot {
 
                 if (options.H) {
                     message.channel.send(chat.HELP.join('\n'));
+                } else if (options.CLEAR) {
+                    
+                    this.saveGuildInfoList();
                 } else {
                     if (options.search) {
                         await this.search(message, options.search);
@@ -140,6 +147,13 @@ class StockBot {
         }
     }
 
+    private async clear(message: Discord.Message): Promise<void> {
+        let memebrInfo = this.getGuildInfo(message.guild.id).getMemberInfo(message.author.id);
+        memebrInfo.clearDealInfo();
+        
+        message.channel.send(`\`\`${this.getName(message.member)}\`\`님의 거래 내역을 초기화했습니다.`);
+    }
+
     private async search(message: Discord.Message, query: string): Promise<void> {
         let msg = await message.channel.send('검색중...');
 
@@ -171,9 +185,13 @@ class StockBot {
         let memebrInfo = this.getGuildInfo(message.guild.id).getMemberInfo(message.author.id);
         let dealInfo = new DealInfo(new Date().toLocaleString(), DealType.Buy, count, itemInfo);
 
-        memebrInfo.dealInfoList.push(dealInfo);
-
-        message.channel.send(`\`\`${this.getName(message.member)}\`\` 님이 \`\`${itemInfo.name}\`\`의 주식 \`\`${count}\`\`개, 총 \`\`${count * itemInfo.price}\`\`원 구매했습니다.`);
+        if (memebrInfo.money >= count * itemInfo.price) {
+            memebrInfo.money -= count * itemInfo.price;
+            message.channel.send(`\`\`${this.getName(message.member)}\`\` 님이 \`\`${itemInfo.name}\`\`의 주식 \`\`${count}\`\`개, 총 \`\`${count * itemInfo.price}\`\`원 구매했습니다.`);
+            memebrInfo.dealInfoList.push(dealInfo);
+        } else {
+            message.channel.send(`\`\`${this.getName(message.member)}\`\` 님이 \`\`${count * itemInfo.price}\`\`원을 쓰려고 하는데 가지고 있는 돈이 \`\`${memebrInfo.money}\`\`원 입니다.`);
+        }
     }
 
     private async sell(message: Discord.Message, code: string, count: number): Promise<void> {
@@ -210,6 +228,7 @@ class StockBot {
         };
 
         memebrInfo.dealInfoList.push(dealInfo);
+        memebrInfo.money += count * itemInfo.price;
         message.channel.send(`\`\`${this.getName(message.member)}\`\` 님이 \`\`${itemInfo.name}\`\`의 주식 \`\`${count}\`\`개, 총 \`\`${count * itemInfo.price}\`\`원 팔았습니다.`);
     }
 
@@ -218,26 +237,21 @@ class StockBot {
         let table = [
             `\`\`${this.getName(message.member)}\`\`님의 거래 정보`,
             '```',
-            ['date'.padStart(22), 'type'.padStart(10), 'count'.padStart(11), 'price'.padStart(11), 'name'.padStart(10)].join(''),
-            '─'.repeat(70)
+            ['code'.padStart(10), 'type'.padStart(10), 'count'.padStart(11), 'price'.padStart(11), 'name'.padStart(10)].join(''),
+            '─'.repeat(52)
         ];
-        let maxLossMoney = 0;
         let maxProfitMoney = 0;
         let currentMoney = 0;
 
         memebrInfo.dealInfoList.forEach(dealInfo => {
             currentMoney += (dealInfo.type == DealType.Buy ? -1 : 1) * dealInfo.itemInfo.price * dealInfo.count;
 
-            if (currentMoney < maxLossMoney) {
-                maxLossMoney = currentMoney;
-            }
-
             if (currentMoney > maxProfitMoney) {
                 maxProfitMoney = currentMoney;
             }
 
             let row = [
-                dealInfo.date.padStart(22),
+                dealInfo.itemInfo.code.padStart(10),
                 (dealInfo.type == DealType.Buy ? 'buy' : 'sell').toString().padStart(10),
                 dealInfo.count.toString().padStart(11),
                 dealInfo.itemInfo.price.toString().padStart(11),
@@ -248,9 +262,8 @@ class StockBot {
             table.push(row);
         });
         table.push('```');
-        table.push(`최대 손실: \`\`${maxLossMoney}\`\``);
         table.push(`최대 이익: \`\`${maxProfitMoney}\`\``);
-        table.push(`현재 돈: \`\`${currentMoney}\`\``);
+        table.push(`현재 돈: \`\`${memebrInfo.money}\`\``);
 
         message.channel.send(table.join('\n'));
     }
@@ -281,6 +294,8 @@ class StockBot {
             let guildInfo = new GuildInfo(guildJSON._guildId);
             guildJSON.memberInfoList.forEach(memberInfoJSON => {
                 let memberInfo = new MemberInfo(memberInfoJSON._memberId);
+                memberInfo.money = memberInfoJSON.money;
+
                 memberInfoJSON.dealInfoList.forEach(dealInfoJSON => {
                     let itemInfo = new ItemInfo(
                         dealInfoJSON.itemInfo.name,
