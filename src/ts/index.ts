@@ -76,11 +76,12 @@ class StockBot {
                 let argv = [''].concat(message.content.split(' '));
                 let program = new Command();
                 program.option('-h', '')
-                    .option('--search <query>', '')
+                    .option('--search <query>', '', (value, previous) => value.split(','))
                     .option('-b, --buy <count>', '')
                     .option('-s, --sell <count>', '')
                     .option('-c, --code <code>', '')
                     .option('--clear')
+                    .option('--compare')
                     .option('--show', '');
     
                 program.exitOverride();
@@ -91,10 +92,12 @@ class StockBot {
                 console.log(options);
 
                 if (options.H) {
-                    message.channel.send(chat.HELP.join('\n'));
+                    await message.channel.send(chat.HELP.join('\n'));
                 } else if (options.CLEAR) {
-                    
-                    this.saveGuildInfoList();
+                    // this.clear(message);
+                    // this.saveGuildInfoList();
+                } else if (options.COMPARE) {
+                    this.compare(message);
                 } else {
                     if (options.search) {
                         await this.search(message, options.search);
@@ -137,12 +140,12 @@ class StockBot {
                 }
             } catch (e) {
                 if (e instanceof CommanderError) {
-                    message.channel.send(`\`\`${e.message}\`\``);
+                    await message.channel.send(`\`\`${e.message}\`\``);
                 } else {
-                    message.channel.send(`\`\`${e.message}\`\``);
+                    await message.channel.send(`\`\`${e.message}\`\``);
                 }
 
-                console.error(e);
+                console.log(e);
             }
         }
     }
@@ -154,19 +157,24 @@ class StockBot {
         message.channel.send(`\`\`${this.getName(message.member)}\`\`님의 거래 내역을 초기화했습니다.`);
     }
 
-    private async search(message: Discord.Message, query: string): Promise<void> {
+    private async search(message: Discord.Message, queryList: Array<string>): Promise<void> {
         let msg = await message.channel.send('검색중...');
 
         let content = new Array<string>();
 
-        let list = await this.stock.searchItems(query);
+        let list = new Array<ItemInfo>();
+
+        for (let query of queryList) {
+            console.log(query);
+            list = list.concat(await this.stock.searchItems(query));
+        }
 
         list.forEach(info => {
             content.push(`\`\`${info.name}\`\` code: \`\`${info.code}\`\`현재가: \`\`${info.price}\`\` 전날 대비: \`\`${info.deltaPrice}\`\` 등락율: \`\`${info.adr}\`\``);
         });
 
         if (list === null) {
-            content.push(`\`\`${query}\`\` 검색결과 없음.`);
+            content.push(`\`\`${queryList.join(', ')}\`\` 검색결과 없음.`);
         } else {
             content.push(`\`\`${list.length}\`\`개의 검색 결과`);
         }
@@ -266,6 +274,10 @@ class StockBot {
         table.push(`현재 돈: \`\`${memebrInfo.money}\`\``);
 
         message.channel.send(table.join('\n'));
+    }
+
+    private async compare(message: Discord.Message): Promise<void> {
+        //
     }
 
     private getGuildInfo(guildId: string): GuildInfo {
